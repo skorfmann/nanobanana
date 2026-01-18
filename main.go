@@ -178,9 +178,17 @@ func run() error {
 
 	// Determine output filename
 	outputPath := *output
+	correctExt := extensionFromMime(mimeType)
 	if outputPath == "" {
-		ext := extensionFromMime(mimeType)
-		outputPath = fmt.Sprintf("image_%s%s", time.Now().Format("20060102_150405"), ext)
+		outputPath = fmt.Sprintf("image_%s%s", time.Now().Format("20060102_150405"), correctExt)
+	} else {
+		// Check if user-provided extension matches the actual format
+		currentExt := strings.ToLower(filepath.Ext(outputPath))
+		if currentExt != correctExt {
+			// Auto-correct the extension
+			outputPath = strings.TrimSuffix(outputPath, filepath.Ext(outputPath)) + correctExt
+			fmt.Printf("\nInfo: API returned %s format, adjusted output to: %s\n", mimeType, outputPath)
+		}
 	}
 
 	// Write file
