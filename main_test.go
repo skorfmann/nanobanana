@@ -53,9 +53,9 @@ func TestExtensionFromMime(t *testing.T) {
 		{"image/png", ".png"},
 		{"image/jpeg", ".jpg"},
 		{"image/webp", ".webp"},
-		{"image/gif", ".png"},     // unsupported, defaults to .png
-		{"unknown/type", ".png"},  // unknown, defaults to .png
-		{"", ".png"},              // empty, defaults to .png
+		{"image/gif", ".png"},    // unsupported, defaults to .png
+		{"unknown/type", ".png"}, // unknown, defaults to .png
+		{"", ".png"},             // empty, defaults to .png
 	}
 
 	for _, tt := range tests {
@@ -79,8 +79,8 @@ func TestMimeFromExtension(t *testing.T) {
 		{"image.JPEG", "image/jpeg"},
 		{"image.webp", "image/webp"},
 		{"image.gif", "image/gif"},
-		{"image.bmp", "image/png"},    // unsupported, defaults to image/png
-		{"image", "image/png"},        // no extension, defaults to image/png
+		{"image.bmp", "image/png"}, // unsupported, defaults to image/png
+		{"image", "image/png"},     // no extension, defaults to image/png
 		{"/path/to/image.jpg", "image/jpeg"},
 	}
 
