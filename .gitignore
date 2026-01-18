@@ -1,6 +1,6 @@
-# Binaries
-nanobanana
-nanobanana-*
+# Binaries (root level only)
+/nanobanana
+/nanobanana-*
 *.exe
 
 # Generated images
