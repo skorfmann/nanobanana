@@ -25,6 +25,12 @@ brew tap skorfmann/nanobanana
 brew install nanobanana
 ```
 
+To upgrade to the latest version:
+
+```bash
+brew upgrade nanobanana
+```
+
 ### From GitHub Releases
 
 Download the latest binary for your platform from the [Releases](../../releases) page.
