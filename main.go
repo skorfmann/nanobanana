@@ -343,6 +343,7 @@ Options:
   -i <file>      Input image file (can be repeated for multi-image composition)
                   Supported formats: PNG, JPEG, WebP, GIF
   -o <file>      Output filename (auto-generated if not specified)
+                  Extension auto-corrected to match API response format
   -aspect <ratio> Aspect ratio (default: 1:1)
                   Valid: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9
   -size <size>   Image size (default: 1K)
@@ -356,18 +357,18 @@ Environment:
 Examples:
   # Text-to-image generation
   nanobanana "a cute cat"
-  nanobanana -o output.png "a sunset over mountains"
+  nanobanana -o output.jpg "a sunset over mountains"
   nanobanana -aspect 16:9 -size 2K "cinematic landscape"
 
   # Image editing (single input)
   nanobanana -i photo.jpg "transform into watercolor style"
-  nanobanana -i portrait.png "make it look like a Van Gogh painting"
+  nanobanana -i portrait.jpg "make it look like a Van Gogh painting"
 
   # Multi-image composition
-  nanobanana -i background.png -i subject.png "place subject in the scene"
-  nanobanana -i dress.png -i model.png "show the dress on the model"
+  nanobanana -i background.jpg -i subject.jpg "place subject in the scene"
+  nanobanana -i dress.jpg -i model.jpg "show the dress on the model"
 
   # Combined options
-  nanobanana -i input.jpg -aspect 16:9 -size 2K -o output.png "cinematic edit"
+  nanobanana -i input.jpg -aspect 16:9 -size 2K -o output.jpg "cinematic edit"
 `)
 }
