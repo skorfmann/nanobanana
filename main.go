@@ -168,6 +168,50 @@ type APIConfig struct {
 	Model         string
 }
 
+// FileConfig represents the configuration file structure
+type FileConfig struct {
+	API    string `json:"api"`    // "gemini" or "openrouter"
+	Model  string `json:"model"`  // OpenRouter model name
+	Aspect string `json:"aspect"` // Default aspect ratio
+	Size   string `json:"size"`   // Default image size
+}
+
+// getConfigPath returns the path to the config file following XDG spec
+func getConfigPath() string {
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		configHome = filepath.Join(home, ".config")
+	}
+	return filepath.Join(configHome, "nanobanana", "config.json")
+}
+
+// loadConfig loads configuration from the XDG config file
+func loadConfig() (*FileConfig, error) {
+	configPath := getConfigPath()
+	if configPath == "" {
+		return nil, nil
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var config FileConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	return &config, nil
+}
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -176,13 +220,13 @@ func main() {
 }
 
 func run() error {
-	// Define flags
+	// Define flags with empty defaults (will be filled from config/defaults later)
 	var inputImages stringSlice
 	flag.Var(&inputImages, "i", "Input image file (can be repeated for multi-image composition)")
 	output := flag.String("o", "", "Output filename (auto-generated if not specified)")
-	aspect := flag.String("aspect", "1:1", "Aspect ratio (1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9)")
-	size := flag.String("size", "1K", "Image size (1K, 2K, 4K)")
-	model := flag.String("model", "", "OpenRouter model to use (enables OpenRouter API)")
+	aspectFlag := flag.String("aspect", "", "Aspect ratio (1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9)")
+	sizeFlag := flag.String("size", "", "Image size (1K, 2K, 4K)")
+	modelFlag := flag.String("model", "", "OpenRouter model to use (enables OpenRouter API)")
 	help := flag.Bool("h", false, "Show help")
 	showVersion := flag.Bool("version", false, "Show version")
 
@@ -207,41 +251,79 @@ func run() error {
 	}
 	prompt := strings.Join(args, " ")
 
+	// Load config file
+	fileConfig, err := loadConfig()
+	if err != nil {
+		return err
+	}
+
+	// Apply defaults, then config file, then CLI flags (priority: CLI > config > defaults)
+	aspect := "1:1"
+	size := "1K"
+	model := ""
+	useOpenRouter := false
+
+	// Apply config file values
+	if fileConfig != nil {
+		if fileConfig.Aspect != "" {
+			aspect = fileConfig.Aspect
+		}
+		if fileConfig.Size != "" {
+			size = fileConfig.Size
+		}
+		if fileConfig.Model != "" {
+			model = fileConfig.Model
+		}
+		if fileConfig.API == "openrouter" {
+			useOpenRouter = true
+		}
+	}
+
+	// Apply CLI flags (override config)
+	if *aspectFlag != "" {
+		aspect = *aspectFlag
+	}
+	if *sizeFlag != "" {
+		size = *sizeFlag
+	}
+	if *modelFlag != "" {
+		model = *modelFlag
+		useOpenRouter = true // -model flag implies OpenRouter
+	}
+
 	// Determine which API to use and validate API key
 	config := APIConfig{}
-
-	// Check for OpenRouter API key first if model flag is set or OPENROUTER_API_KEY is present
 	openrouterKey := os.Getenv("OPENROUTER_API_KEY")
 	geminiKey := os.Getenv("GEMINI_API_KEY")
 
-	if *model != "" || (openrouterKey != "" && geminiKey == "") {
+	if useOpenRouter || model != "" || (openrouterKey != "" && geminiKey == "") {
 		// Use OpenRouter
 		if openrouterKey == "" {
-			return fmt.Errorf("OPENROUTER_API_KEY environment variable not set (required when using -model flag or OpenRouter)")
+			return fmt.Errorf("OPENROUTER_API_KEY environment variable not set (required for OpenRouter API)")
 		}
 		config.UseOpenRouter = true
 		config.APIKey = openrouterKey
-		config.Model = *model
+		config.Model = model
 		if config.Model == "" {
 			config.Model = defaultModel
 		}
 	} else {
 		// Use Gemini
 		if geminiKey == "" {
-			return fmt.Errorf("GEMINI_API_KEY environment variable not set (or use OPENROUTER_API_KEY with -model flag)")
+			return fmt.Errorf("GEMINI_API_KEY environment variable not set (or use OPENROUTER_API_KEY)")
 		}
 		config.UseOpenRouter = false
 		config.APIKey = geminiKey
 	}
 
 	// Validate aspect ratio
-	if !validAspectRatios[*aspect] {
-		return fmt.Errorf("invalid aspect ratio: %s (valid: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9)", *aspect)
+	if !validAspectRatios[aspect] {
+		return fmt.Errorf("invalid aspect ratio: %s (valid: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9)", aspect)
 	}
 
 	// Validate size
-	if !validSizes[*size] {
-		return fmt.Errorf("invalid size: %s (valid: 1K, 2K, 4K)", *size)
+	if !validSizes[size] {
+		return fmt.Errorf("invalid size: %s (valid: 1K, 2K, 4K)", size)
 	}
 
 	fmt.Printf("Generating image...\n")
@@ -249,8 +331,8 @@ func run() error {
 	if len(inputImages) > 0 {
 		fmt.Printf("  Inputs: %s\n", strings.Join(inputImages, ", "))
 	}
-	fmt.Printf("  Aspect: %s\n", *aspect)
-	fmt.Printf("  Size:   %s\n", *size)
+	fmt.Printf("  Aspect: %s\n", aspect)
+	fmt.Printf("  Size:   %s\n", size)
 	if config.UseOpenRouter {
 		fmt.Printf("  API:    OpenRouter (%s)\n", config.Model)
 	} else {
@@ -260,15 +342,15 @@ func run() error {
 	// Generate image
 	var imageData []byte
 	var mimeType string
-	var err error
+	var genErr error
 
 	if config.UseOpenRouter {
-		imageData, mimeType, err = generateImageOpenRouter(config, prompt, inputImages, *aspect, *size)
+		imageData, mimeType, genErr = generateImageOpenRouter(config, prompt, inputImages, aspect, size)
 	} else {
-		imageData, mimeType, err = generateImageGemini(config.APIKey, prompt, inputImages, *aspect, *size)
+		imageData, mimeType, genErr = generateImageGemini(config.APIKey, prompt, inputImages, aspect, size)
 	}
-	if err != nil {
-		return err
+	if genErr != nil {
+		return genErr
 	}
 
 	// Determine output filename
@@ -579,15 +661,31 @@ Options:
   -version       Show version
 
 Environment:
-  GEMINI_API_KEY      Gemini API key (used by default)
-  OPENROUTER_API_KEY  OpenRouter API key (used with -model flag, or when
-                      GEMINI_API_KEY is not set)
+  GEMINI_API_KEY      Gemini API key
+  OPENROUTER_API_KEY  OpenRouter API key
 
-API Selection:
-  - If only GEMINI_API_KEY is set: uses Gemini API
-  - If only OPENROUTER_API_KEY is set: uses OpenRouter API
-  - If both are set: uses Gemini API (use -model flag to force OpenRouter)
-  - Use -model flag to explicitly use OpenRouter with a specific model
+Config File:
+  Location: $XDG_CONFIG_HOME/nanobanana/config.json (default: ~/.config/nanobanana/config.json)
+
+  Example config:
+    {
+      "api": "openrouter",
+      "model": "google/gemini-3-pro-image-preview",
+      "aspect": "16:9",
+      "size": "2K"
+    }
+
+  Fields:
+    api     - "gemini" or "openrouter" (default: gemini)
+    model   - OpenRouter model name (only used with openrouter)
+    aspect  - Default aspect ratio
+    size    - Default image size
+
+Priority (highest to lowest):
+  1. CLI flags
+  2. Config file
+  3. Environment variables (for API keys only)
+  4. Built-in defaults
 
 Examples:
   # Text-to-image generation (Gemini)

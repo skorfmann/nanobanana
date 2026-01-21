@@ -14,31 +14,33 @@ Nanobanana is a single-file Go CLI tool that wraps Google's Gemini image generat
 
 ## Architecture
 
-- **Single file**: All code lives in `main.go` (~365 lines)
+- **Single file**: All code lives in `main.go` (~710 lines)
 - **Zero dependencies**: Uses only Go standard library
 - **Cross-platform**: Builds for Linux, macOS, and Windows (amd64/arm64)
 - **CI/CD**: GitHub Actions releases on every push to main
 
 ## Code Structure (main.go)
 
-| Lines | Section |
-|-------|---------|
-| 17-18 | Version variable (set at build time) |
-| 20-109 | Type definitions (request/response structs) |
-| 32-54 | Configuration constants (API endpoint, valid ratios/sizes) |
-| 111-116 | `main()` - entry point |
-| 118-193 | `run()` - CLI orchestration (including -version flag) |
-| 195-285 | `generateImage()` - API interaction |
-| 287-314 | MIME type helpers |
-| 316-326 | `loadImage()` - file loading |
-| 328-364 | `printUsage()` - help text |
+| Section | Description |
+|---------|-------------|
+| Type definitions | Request/response structs for Gemini and OpenRouter APIs |
+| Configuration | Constants (API endpoints, valid ratios/sizes) |
+| `FileConfig` | XDG config file structure and loading |
+| `main()` / `run()` | CLI orchestration |
+| `generateImageGemini()` | Direct Gemini API interaction |
+| `generateImageOpenRouter()` | OpenRouter API interaction |
+| MIME helpers | Extension/MIME type conversions |
+| `loadImage()` | File loading for input images |
+| `printUsage()` | Help text |
 
 ## Key Types
 
 - `Version` - Build version string (set via `-ldflags`)
 - `stringSlice` - Custom flag type for repeatable `-i` flags
-- `GenerateRequest` / `GenerateResponse` - API payload structures
-- `Part` - Content part (text or inline image data)
+- `FileConfig` - XDG config file structure (`api`, `model`, `aspect`, `size`)
+- `APIConfig` - Runtime API configuration
+- `GenerateRequest` / `GenerateResponse` - Gemini API payload structures
+- `OpenRouterRequest` / `OpenRouterResponse` - OpenRouter API payload structures
 
 ## Build Commands
 
@@ -60,9 +62,32 @@ GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.Version=$VERSION" -o na
 ./nanobanana -version
 ```
 
-## Environment Variables
+## Configuration
 
-- `GEMINI_API_KEY` (required) - Google Gemini API key
+### Config File
+
+Location: `$XDG_CONFIG_HOME/nanobanana/config.json` (default: `~/.config/nanobanana/config.json`)
+
+```json
+{
+  "api": "openrouter",
+  "model": "google/gemini-3-pro-image-preview",
+  "aspect": "16:9",
+  "size": "2K"
+}
+```
+
+### Environment Variables
+
+- `GEMINI_API_KEY` - Google Gemini API key
+- `OPENROUTER_API_KEY` - OpenRouter API key
+
+### Priority (highest to lowest)
+
+1. CLI flags
+2. Config file
+3. Environment variables (API keys only)
+4. Built-in defaults
 
 ## API Details
 
@@ -129,7 +154,8 @@ ls -la image_*.jpg
 
 Errors are wrapped with context using `fmt.Errorf("context: %w", err)`. The main error paths:
 
-- Missing `GEMINI_API_KEY`
+- Missing API key (`GEMINI_API_KEY` or `OPENROUTER_API_KEY`)
+- Invalid config file (parse error)
 - Invalid aspect ratio or size
 - Failed to load input image
 - API request failure

@@ -71,11 +71,51 @@ export GEMINI_API_KEY="your-api-key-here"
 export OPENROUTER_API_KEY="your-api-key-here"
 ```
 
-### API Selection Logic
+## Configuration
 
-- If only `GEMINI_API_KEY` is set: uses Gemini API directly
-- If only `OPENROUTER_API_KEY` is set: uses OpenRouter API
-- If both are set: uses Gemini API (use `-model` flag to force OpenRouter)
+### Config File (Recommended)
+
+Create a config file at `~/.config/nanobanana/config.json`:
+
+```json
+{
+  "api": "openrouter",
+  "model": "google/gemini-3-pro-image-preview",
+  "aspect": "16:9",
+  "size": "2K"
+}
+```
+
+| Field | Description | Values |
+|-------|-------------|--------|
+| `api` | API backend | `gemini` or `openrouter` |
+| `model` | OpenRouter model | e.g., `google/gemini-3-pro-image-preview` |
+| `aspect` | Default aspect ratio | `1:1`, `16:9`, etc. |
+| `size` | Default image size | `1K`, `2K`, `4K` |
+
+The config file location follows the XDG spec: `$XDG_CONFIG_HOME/nanobanana/config.json`
+
+### Priority
+
+Settings are resolved in this order (highest to lowest):
+
+1. CLI flags
+2. Config file
+3. Environment variables (API keys only)
+4. Built-in defaults
+
+### Shell Wrapper Example
+
+For 1Password users, a simple wrapper in `.zshrc`:
+
+```bash
+nanobanana() {
+  if [[ -z "$OPENROUTER_API_KEY" ]]; then
+    export OPENROUTER_API_KEY="$(op read 'op://API Keys/OpenRouter/credential')"
+  fi
+  /path/to/nanobanana "$@"
+}
+```
 
 ## Usage
 
