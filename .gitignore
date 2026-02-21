@@ -1,7 +1,10 @@
-# Binaries (root level only)
-/nanobanana
-/nanobanana-*
-*.exe
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
 
 # Generated images
 image_*.png

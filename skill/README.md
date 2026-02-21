@@ -1,61 +1,31 @@
-# Nanobanana Skill for Claude
+# Nanobanana Skill for Claude Code
 
-This folder contains a [Claude Skill](https://support.anthropic.com/en/articles/11175166-what-are-skills-and-how-do-i-use-them) for using nanobanana with Claude Code and Claude.ai.
+This folder contains a [Claude Skill](https://support.anthropic.com/en/articles/11175166-what-are-skills-and-how-do-i-use-them) for using nanobanana with Claude Code.
 
 ## Installation
 
-### Claude Code
+Run `./install.sh` from the repository root — it installs both the CLI and this skill.
 
-Copy the `nanobanana` folder to your Claude Code skills directory, or reference it directly.
+```bash
+git clone https://github.com/sussdorff/nanobanana.git
+cd nanobanana
+./install.sh
+```
 
-### Claude.ai (Pro/Max/Team/Enterprise)
+The skill is copied to `~/.claude/skills/nanobanana/`.
 
-1. Zip the `nanobanana` folder:
-   ```bash
-   cd skill
-   zip -r nanobanana.zip nanobanana
-   ```
+## Prerequisites
 
-2. Upload to Claude.ai:
-   - Go to **Settings** → **Skills**
-   - Click **Upload Skill**
-   - Select `nanobanana.zip`
+- nanobanana CLI (installed by `install.sh`)
+- `GEMINI_API_KEY` or `OPENROUTER_API_KEY` environment variable
 
-3. Enable the skill in your conversation settings.
+Get a Gemini API key at: https://aistudio.google.com/apikey
 
 ## What This Skill Does
 
 When enabled, Claude will automatically use nanobanana to:
 
 - Generate images from text descriptions
-- Create presentation slides with consistent styling
+- Create slides, dashboards, wireframes, moodboards, icons, architecture diagrams
 - Edit and transform existing images
-- Design banners, thumbnails, and social media graphics
-
-## Example Usage
-
-Just ask Claude naturally:
-
-- "Create a hero image for my landing page about AI productivity tools"
-- "Generate a 3-slide presentation about our Q4 results"
-- "Make a social media banner for our product launch"
-- "Edit this image to add a sunset in the background"
-
-Claude will use nanobanana with appropriate settings and prompts.
-
-## Prerequisites
-
-Before using this skill, ensure:
-
-1. nanobanana is installed:
-   ```bash
-   brew tap skorfmann/nanobanana
-   brew install nanobanana
-   ```
-
-2. `GEMINI_API_KEY` environment variable is set:
-   ```bash
-   export GEMINI_API_KEY="your-api-key"
-   ```
-
-Get an API key at: https://aistudio.google.com/apikey
+- Guide you through discovery questions for complex requests
