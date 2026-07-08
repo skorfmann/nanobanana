@@ -59,13 +59,22 @@ nanobanana -i template.jpg -i content.jpg "apply the template style"
 |------|-------------|---------|
 | `-i <file>` | Input image (repeatable) | none |
 | `-o <file>` | Output filename | auto-generated |
+| `-model <name>` | Model: `lite`, `flash`, `pro`, or full model ID | `flash` |
 | `-aspect <ratio>` | Aspect ratio | `1:1` |
-| `-size <size>` | Image size (1K, 2K, 4K) | `1K` |
+| `-size <size>` | Image size (0.5K, 1K, 2K, 4K; model-dependent) | `1K` |
 | `-version` | Show version | - |
+
+## Models
+
+- `lite` (Nano Banana 2 Lite): fastest/cheapest, drafts and high volume; 1K only
+- `flash` (Nano Banana 2): default go-to model; 0.5K-4K, all aspect ratios
+- `pro` (Nano Banana Pro): highest quality for complex/detailed work; 1K/2K/4K
 
 ## Supported Aspect Ratios
 
-`1:1`, `2:3`, `3:2`, `3:4`, `4:3`, `4:5`, `5:4`, `9:16`, `16:9`, `21:9`
+All models: `1:1`, `2:3`, `3:2`, `3:4`, `4:3`, `4:5`, `5:4`, `9:16`, `16:9`, `21:9`
+
+`flash` only: `1:4`, `4:1`, `1:8`, `8:1` (extreme banners)
 
 ## Workflow Patterns
 
@@ -104,10 +113,11 @@ nanobanana -i draft.jpg -o final.jpg "make the colors more vibrant and add a sub
 3. **For consistency**: Use a template image with `-i` flag
 4. **For slides**: Always use `-aspect 16:9 -size 2K`
 
-## Pricing
+## Pricing (approximate, per image)
 
-- 1K-2K images: ~$0.13 per image
-- 4K images: ~$0.24 per image
+- `lite`: ~$0.034 (1K)
+- `flash`: ~$0.045 (0.5K), ~$0.067 (1K), ~$0.101 (2K), ~$0.151 (4K)
+- `pro`: ~$0.134 (1K/2K), ~$0.24 (4K)
 
 ## Example Prompts
 

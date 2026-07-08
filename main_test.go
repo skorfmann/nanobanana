@@ -94,7 +94,7 @@ func TestMimeFromExtension(t *testing.T) {
 }
 
 func TestValidAspectRatios(t *testing.T) {
-	valid := []string{"1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"}
+	valid := []string{"1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1"}
 	invalid := []string{"1:2", "16:10", "4:4", "invalid", ""}
 
 	for _, ratio := range valid {
@@ -115,8 +115,8 @@ func TestValidAspectRatios(t *testing.T) {
 }
 
 func TestValidSizes(t *testing.T) {
-	valid := []string{"1K", "2K", "4K"}
-	invalid := []string{"1k", "3K", "8K", "HD", ""}
+	valid := []string{"0.5K", "1K", "2K", "4K"}
+	invalid := []string{"1k", "0.5k", "3K", "8K", "HD", ""}
 
 	for _, size := range valid {
 		t.Run("valid_"+size, func(t *testing.T) {
@@ -132,6 +132,75 @@ func TestValidSizes(t *testing.T) {
 				t.Errorf("validSizes[%q] = true, want false", size)
 			}
 		})
+	}
+}
+
+func TestResolveModel(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"lite", "gemini-3.1-flash-lite-image"},
+		{"flash", "gemini-3.1-flash-image"},
+		{"pro", "gemini-3-pro-image"},
+		{"gemini-3-pro-image", "gemini-3-pro-image"},
+		{"gemini-2.5-flash-image", "gemini-2.5-flash-image"},
+		{"some-future-model", "some-future-model"}, // unknown IDs pass through
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := resolveModel(tt.input); got != tt.expected {
+				t.Errorf("resolveModel(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestModelCapabilities(t *testing.T) {
+	tests := []struct {
+		name   string
+		model  string
+		aspect string
+		size   string
+		valid  bool
+	}{
+		{"flash_supports_0.5K", "gemini-3.1-flash-image", "1:1", "0.5K", true},
+		{"flash_supports_4K", "gemini-3.1-flash-image", "16:9", "4K", true},
+		{"flash_supports_extreme_ratio", "gemini-3.1-flash-image", "8:1", "1K", true},
+		{"lite_rejects_2K", "gemini-3.1-flash-lite-image", "1:1", "2K", false},
+		{"lite_rejects_0.5K", "gemini-3.1-flash-lite-image", "1:1", "0.5K", false},
+		{"lite_supports_1K", "gemini-3.1-flash-lite-image", "16:9", "1K", true},
+		{"lite_rejects_extreme_ratio", "gemini-3.1-flash-lite-image", "4:1", "1K", false},
+		{"pro_rejects_0.5K", "gemini-3-pro-image", "1:1", "0.5K", false},
+		{"pro_supports_4K", "gemini-3-pro-image", "21:9", "4K", true},
+		{"pro_rejects_extreme_ratio", "gemini-3-pro-image", "1:8", "1K", false},
+		{"legacy_supports_1K", "gemini-2.5-flash-image", "1:1", "1K", true},
+		{"legacy_rejects_4K", "gemini-2.5-flash-image", "1:1", "4K", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			caps, known := modelCapabilities[tt.model]
+			if !known {
+				t.Fatalf("modelCapabilities missing entry for %q", tt.model)
+			}
+			got := caps.aspectRatios[tt.aspect] && caps.sizes[tt.size]
+			if got != tt.valid {
+				t.Errorf("model %s aspect=%s size=%s: valid = %v, want %v", tt.model, tt.aspect, tt.size, got, tt.valid)
+			}
+		})
+	}
+}
+
+func TestLegacyModelOmitsSizeParam(t *testing.T) {
+	if modelCapabilities["gemini-2.5-flash-image"].sizeParam {
+		t.Error("gemini-2.5-flash-image should not send imageConfig.imageSize")
+	}
+	for _, model := range []string{"gemini-3.1-flash-lite-image", "gemini-3.1-flash-image", "gemini-3-pro-image"} {
+		if !modelCapabilities[model].sizeParam {
+			t.Errorf("%s should send imageConfig.imageSize", model)
+		}
 	}
 }
 

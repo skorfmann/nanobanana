@@ -9,12 +9,13 @@ A lightweight CLI tool for generating and editing images using Google's Gemini A
 - **Text-to-image generation** - Create images from text prompts
 - **Image editing** - Transform existing images with text instructions
 - **Multi-image composition** - Combine multiple input images
-- **Flexible output** - 9 aspect ratios and 3 size options
+- **Model selection** - All current Nano Banana models (Lite, 2, Pro) via `-model`
+- **Flexible output** - Up to 14 aspect ratios and 4 size options (model-dependent)
 
 ## Requirements
 
 - Go 1.25+ (for building from source)
-- Google Gemini API key with access to `gemini-3-pro-image-preview`
+- Google Gemini API key with access to the Gemini image models (Nano Banana)
 
 ## Installation
 
@@ -71,22 +72,36 @@ nanobanana [options] "prompt"
 |------|-------------|---------|
 | `-i <file>` | Input image (repeatable for multiple images) | none |
 | `-o <file>` | Output filename | `image_YYYYMMDD_HHMMSS.png` |
+| `-model <name>` | Model: `lite`, `flash`, `pro`, or a full model ID | `flash` |
 | `-aspect <ratio>` | Aspect ratio | `1:1` |
 | `-size <size>` | Image size | `1K` |
 | `-h` | Show help | - |
 | `-version` | Show version | - |
 
+### Models
+
+| Alias | Model ID | Best For | Sizes |
+|-------|----------|----------|-------|
+| `lite` | `gemini-3.1-flash-lite-image` (Nano Banana 2 Lite) | Fast, cheap drafts and high volume | 1K |
+| `flash` | `gemini-3.1-flash-image` (Nano Banana 2) | Go-to model, best balance (default) | 0.5K, 1K, 2K, 4K |
+| `pro` | `gemini-3-pro-image` (Nano Banana Pro) | Highest quality, complex compositions | 1K, 2K, 4K |
+
+Full Gemini model IDs (e.g. `gemini-2.5-flash-image`) are also accepted, so new models work without a rebuild.
+
 ### Supported Aspect Ratios
 
-`1:1`, `2:3`, `3:2`, `3:4`, `4:3`, `4:5`, `5:4`, `9:16`, `16:9`, `21:9`
+All models: `1:1`, `2:3`, `3:2`, `3:4`, `4:3`, `4:5`, `5:4`, `9:16`, `16:9`, `21:9`
+
+`flash` only: `1:4`, `4:1`, `1:8`, `8:1` (extreme banners/skyscrapers)
 
 ### Supported Sizes
 
-| Size | Resolution |
-|------|------------|
-| `1K` | ~1024px |
-| `2K` | ~2048px |
-| `4K` | ~4096px |
+| Size | Resolution | Models |
+|------|------------|--------|
+| `0.5K` | ~512px | flash |
+| `1K` | ~1024px | all |
+| `2K` | ~2048px | flash, pro |
+| `4K` | ~4096px | flash, pro |
 
 ### Supported Image Formats
 
@@ -105,6 +120,15 @@ nanobanana -aspect 16:9 -size 2K "cinematic mountain landscape at sunset"
 
 # Custom output filename
 nanobanana -o hero-image.png "abstract geometric pattern"
+
+# Cheap draft with the lite model
+nanobanana -model lite "quick concept sketch of a logo"
+
+# Maximum quality with the pro model
+nanobanana -model pro -size 4K "detailed product shot of a watch"
+
+# Extreme banner ratio (flash only)
+nanobanana -aspect 4:1 -size 0.5K "website header, abstract gradient"
 ```
 
 ### Image editing
@@ -172,12 +196,13 @@ See `examples/branded-presentation/` for a complete workflow demonstration.
 
 ## API Pricing
 
-Uses `gemini-3-pro-image-preview` model. Approximate costs:
+Approximate cost per image (paid tier, July 2026):
 
-| Size | Cost per Image |
-|------|----------------|
-| 1K-2K | ~$0.13 |
-| 4K | ~$0.24 |
+| Model | 0.5K | 1K | 2K | 4K |
+|-------|------|----|----|----|
+| `lite` | - | ~$0.034 | - | - |
+| `flash` (default) | ~$0.045 | ~$0.067 | ~$0.101 | ~$0.151 |
+| `pro` | - | ~$0.134 | ~$0.134 | ~$0.24 |
 
 See [Gemini API Pricing](https://ai.google.dev/gemini-api/docs/pricing) for current rates.
 

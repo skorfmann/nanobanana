@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -30,11 +31,26 @@ func (s *stringSlice) Set(value string) error {
 }
 
 const (
-	apiEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent"
-	httpTimeout = 120 * time.Second
+	apiEndpointTemplate = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent"
+	defaultModel        = "gemini-3.1-flash-image"
+	httpTimeout         = 120 * time.Second
 )
 
-var validAspectRatios = map[string]bool{
+// modelAliases maps friendly names to full Gemini model IDs
+var modelAliases = map[string]string{
+	"lite":  "gemini-3.1-flash-lite-image", // Nano Banana 2 Lite
+	"flash": "gemini-3.1-flash-image",      // Nano Banana 2
+	"pro":   "gemini-3-pro-image",          // Nano Banana Pro
+}
+
+// modelCaps describes what a known model supports
+type modelCaps struct {
+	aspectRatios map[string]bool
+	sizes        map[string]bool
+	sizeParam    bool // whether the model accepts imageConfig.imageSize
+}
+
+var standardAspectRatios = map[string]bool{
 	"1:1":  true,
 	"2:3":  true,
 	"3:2":  true,
@@ -47,10 +63,74 @@ var validAspectRatios = map[string]bool{
 	"21:9": true,
 }
 
+// extendedAspectRatios adds the extreme ratios supported by gemini-3.1-flash-image
+var extendedAspectRatios = map[string]bool{
+	"1:1":  true,
+	"1:4":  true,
+	"1:8":  true,
+	"2:3":  true,
+	"3:2":  true,
+	"3:4":  true,
+	"4:1":  true,
+	"4:3":  true,
+	"4:5":  true,
+	"5:4":  true,
+	"8:1":  true,
+	"9:16": true,
+	"16:9": true,
+	"21:9": true,
+}
+
+var modelCapabilities = map[string]modelCaps{
+	"gemini-3.1-flash-lite-image": {
+		aspectRatios: standardAspectRatios,
+		sizes:        map[string]bool{"1K": true},
+		sizeParam:    true,
+	},
+	"gemini-3.1-flash-image": {
+		aspectRatios: extendedAspectRatios,
+		sizes:        map[string]bool{"0.5K": true, "1K": true, "2K": true, "4K": true},
+		sizeParam:    true,
+	},
+	"gemini-3-pro-image": {
+		aspectRatios: standardAspectRatios,
+		sizes:        map[string]bool{"1K": true, "2K": true, "4K": true},
+		sizeParam:    true,
+	},
+	"gemini-2.5-flash-image": {
+		aspectRatios: standardAspectRatios,
+		sizes:        map[string]bool{"1K": true},
+		sizeParam:    false, // legacy model has fixed per-ratio resolutions
+	},
+}
+
+// validAspectRatios is the union across all known models, used for unknown model IDs
+var validAspectRatios = extendedAspectRatios
+
+// validSizes is the union across all known models, used for unknown model IDs
 var validSizes = map[string]bool{
-	"1K": true,
-	"2K": true,
-	"4K": true,
+	"0.5K": true,
+	"1K":   true,
+	"2K":   true,
+	"4K":   true,
+}
+
+// resolveModel expands a friendly alias to a full model ID; unknown values pass through
+func resolveModel(name string) string {
+	if id, ok := modelAliases[name]; ok {
+		return id
+	}
+	return name
+}
+
+// sortedKeys returns the map keys sorted for stable error messages
+func sortedKeys(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // Request structures
@@ -120,8 +200,9 @@ func run() error {
 	var inputImages stringSlice
 	flag.Var(&inputImages, "i", "Input image file (can be repeated for multi-image composition)")
 	output := flag.String("o", "", "Output filename (auto-generated if not specified)")
-	aspect := flag.String("aspect", "1:1", "Aspect ratio (1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9)")
-	size := flag.String("size", "1K", "Image size (1K, 2K, 4K)")
+	model := flag.String("model", defaultModel, "Model: lite, flash, pro, or a full Gemini model ID")
+	aspect := flag.String("aspect", "1:1", "Aspect ratio (e.g. 1:1, 16:9, 21:9; model-dependent)")
+	size := flag.String("size", "1K", "Image size (0.5K, 1K, 2K, 4K; model-dependent)")
 	help := flag.Bool("h", false, "Show help")
 	showVersion := flag.Bool("version", false, "Show version")
 
@@ -152,14 +233,18 @@ func run() error {
 		return fmt.Errorf("GEMINI_API_KEY environment variable not set")
 	}
 
-	// Validate aspect ratio
-	if !validAspectRatios[*aspect] {
-		return fmt.Errorf("invalid aspect ratio: %s (valid: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9)", *aspect)
+	// Resolve model alias and validate against its capabilities.
+	// Unknown model IDs pass through with union validation so new models work without a rebuild.
+	modelID := resolveModel(*model)
+	aspectRatios, sizes := validAspectRatios, validSizes
+	if caps, known := modelCapabilities[modelID]; known {
+		aspectRatios, sizes = caps.aspectRatios, caps.sizes
 	}
-
-	// Validate size
-	if !validSizes[*size] {
-		return fmt.Errorf("invalid size: %s (valid: 1K, 2K, 4K)", *size)
+	if !aspectRatios[*aspect] {
+		return fmt.Errorf("invalid aspect ratio for %s: %s (valid: %s)", modelID, *aspect, strings.Join(sortedKeys(aspectRatios), ", "))
+	}
+	if !sizes[*size] {
+		return fmt.Errorf("invalid size for %s: %s (valid: %s)", modelID, *size, strings.Join(sortedKeys(sizes), ", "))
 	}
 
 	fmt.Printf("Generating image...\n")
@@ -167,11 +252,12 @@ func run() error {
 	if len(inputImages) > 0 {
 		fmt.Printf("  Inputs: %s\n", strings.Join(inputImages, ", "))
 	}
+	fmt.Printf("  Model:  %s\n", modelID)
 	fmt.Printf("  Aspect: %s\n", *aspect)
 	fmt.Printf("  Size:   %s\n", *size)
 
 	// Generate image
-	imageData, mimeType, err := generateImage(apiKey, prompt, inputImages, *aspect, *size)
+	imageData, mimeType, err := generateImage(apiKey, modelID, prompt, inputImages, *aspect, *size)
 	if err != nil {
 		return err
 	}
@@ -200,7 +286,7 @@ func run() error {
 	return nil
 }
 
-func generateImage(apiKey, prompt string, inputImages []string, aspectRatio, imageSize string) ([]byte, string, error) {
+func generateImage(apiKey, modelID, prompt string, inputImages []string, aspectRatio, imageSize string) ([]byte, string, error) {
 	// Build parts: input images first, then text prompt (per Gemini API pattern)
 	var parts []Part
 
@@ -214,6 +300,15 @@ func generateImage(apiKey, prompt string, inputImages []string, aspectRatio, ima
 
 	parts = append(parts, Part{Text: prompt})
 
+	imageConfig := &ImageConfig{AspectRatio: aspectRatio, ImageSize: imageSize}
+	if caps, known := modelCapabilities[modelID]; known && !caps.sizeParam {
+		imageConfig.ImageSize = ""
+	}
+	// generateContent expects "512px" where the docs (Interactions API) say "0.5K"
+	if imageConfig.ImageSize == "0.5K" {
+		imageConfig.ImageSize = "512px"
+	}
+
 	// Build request
 	req := GenerateRequest{
 		Contents: []Content{
@@ -223,10 +318,7 @@ func generateImage(apiKey, prompt string, inputImages []string, aspectRatio, ima
 		},
 		GenerationConfig: GenerationConfig{
 			ResponseModalities: []string{"IMAGE", "TEXT"},
-			ImageConfig: &ImageConfig{
-				AspectRatio: aspectRatio,
-				ImageSize:   imageSize,
-			},
+			ImageConfig:        imageConfig,
 		},
 	}
 
@@ -236,7 +328,8 @@ func generateImage(apiKey, prompt string, inputImages []string, aspectRatio, ima
 	}
 
 	// Create HTTP request
-	httpReq, err := http.NewRequest("POST", apiEndpoint, bytes.NewReader(reqBody))
+	endpoint := fmt.Sprintf(apiEndpointTemplate, modelID)
+	httpReq, err := http.NewRequest("POST", endpoint, bytes.NewReader(reqBody))
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create request: %w", err)
 	}
@@ -344,10 +437,16 @@ Options:
                   Supported formats: PNG, JPEG, WebP, GIF
   -o <file>      Output filename (auto-generated if not specified)
                   Extension auto-corrected to match API response format
+  -model <name>  Model (default: flash). Aliases:
+                  lite  = gemini-3.1-flash-lite-image (Nano Banana 2 Lite, fastest/cheapest)
+                  flash = gemini-3.1-flash-image      (Nano Banana 2, go-to model)
+                  pro   = gemini-3-pro-image          (Nano Banana Pro, highest quality)
+                  Full Gemini model IDs are also accepted.
   -aspect <ratio> Aspect ratio (default: 1:1)
-                  Valid: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9
+                  All models: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9
+                  flash only: 1:4, 4:1, 1:8, 8:1
   -size <size>   Image size (default: 1K)
-                  Valid: 1K, 2K, 4K
+                  lite: 1K | pro: 1K, 2K, 4K | flash: 0.5K, 1K, 2K, 4K
   -h             Show this help
   -version       Show version
 
@@ -359,6 +458,10 @@ Examples:
   nanobanana "a cute cat"
   nanobanana -o output.jpg "a sunset over mountains"
   nanobanana -aspect 16:9 -size 2K "cinematic landscape"
+
+  # Model selection
+  nanobanana -model lite "quick draft thumbnail"
+  nanobanana -model pro -size 4K "detailed product shot"
 
   # Image editing (single input)
   nanobanana -i photo.jpg "transform into watercolor style"
